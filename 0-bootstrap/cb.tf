@@ -26,7 +26,7 @@ locals {
 
   bucket_self_link_prefix             = "https://www.googleapis.com/storage/v1/b/"
   default_state_bucket_self_link      = "${local.bucket_self_link_prefix}${module.seed_bootstrap.gcs_bucket_tfstate}"
-  gcp_projects_state_bucket_self_link = module.gcp_projects_state_bucket.bucket.self_link
+  gcp_projects_state_bucket_self_link = var.enable_cicd_project_creation == true ? module.gcp_projects_state_bucket[0].bucket.self_link : null
 
   cb_config = {
     "bootstrap" = {
@@ -70,6 +70,7 @@ resource "random_string" "suffix" {
 }
 
 module "gcp_projects_state_bucket" {
+  count = var.enable_cicd_project_creation == true ? 1 : 0
   source  = "terraform-google-modules/cloud-storage/google//modules/simple_bucket"
   version = "~> 4.0"
 

@@ -105,7 +105,7 @@ output "gcs_bucket_cloudbuild_logs" {
 
 output "projects_gcs_bucket_tfstate" {
   description = "Bucket used for storing terraform state for stage 4-projects foundations pipelines in seed project."
-  value       = module.gcp_projects_state_bucket.bucket.name
+  value       = var.enable_cicd_project_creation == true ? module.gcp_projects_state_bucket[0].bucket.name : null
 }
 
 output "cloud_builder_artifact_repo" {
