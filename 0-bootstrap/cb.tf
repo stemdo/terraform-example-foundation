@@ -20,7 +20,7 @@ locals {
   // The version of the terraform docker image to be used in the workspace builds
   docker_tag_version_terraform = "v1"
 
-  cicd_project_id = module.tf_source.cloudbuild_project_id
+  cicd_project_id = var.enable_cicd_project_creation == true ? module.tf_source[0].cloudbuild_project_id : null
 
   state_bucket_kms_key = "projects/${module.seed_bootstrap.seed_project_id}/locations/${var.default_region}/keyRings/${var.project_prefix}-keyring/cryptoKeys/${var.project_prefix}-key"
 
@@ -58,11 +58,12 @@ locals {
     "gcp-bootstrap",
     local.cloudbuilder_repo,
   ]
-  gar_repository           = split("/", module.tf_cloud_builder.artifact_repo)[length(split("/", module.tf_cloud_builder.artifact_repo)) - 1]
-  cloud_builder_trigger_id = element(split("/", module.tf_cloud_builder.cloudbuild_trigger_id), index(split("/", module.tf_cloud_builder.cloudbuild_trigger_id), "triggers") + 1, )
+  gar_repository           = var.enable_cicd_project_creation == true ? split("/", module.tf_cloud_builder[0].artifact_repo)[length(split("/", module.tf_cloud_builder[0].artifact_repo)) - 1] : null
+  cloud_builder_trigger_id = var.enable_cicd_project_creation == true ? element(split("/", module.tf_cloud_builder[0].cloudbuild_trigger_id), index(split("/", module.tf_cloud_builder[0].cloudbuild_trigger_id), "triggers") + 1, ) : null
 }
 
 resource "random_string" "suffix" {
+  count   = var.enable_cicd_project_creation == true ? 1 : 0
   length  = 4
   special = false
   upper   = false
@@ -85,12 +86,12 @@ module "gcp_projects_state_bucket" {
 }
 
 module "tf_source" {
-  source  = "terraform-google-modules/bootstrap/google//modules/tf_cloudbuild_source"
-  version = "~> 6.4"
-
+  count                 = var.enable_cicd_project_creation == true ? 1 : 0
+  source                = "terraform-google-modules/bootstrap/google//modules/tf_cloudbuild_source"
+  version               = "~> 6.4"
   org_id                = var.org_id
   folder_id             = google_folder.bootstrap.id
-  project_id            = "${var.project_prefix}-b-cicd-${random_string.suffix.result}"
+  project_id            = "${var.project_prefix}-b-cicd-${random_string.suffix[0].result}"
   location              = var.default_region
   billing_account       = var.billing_account
   group_org_admins      = local.group_org_admins
@@ -134,9 +135,10 @@ module "tf_source" {
 }
 
 module "tf_private_pool" {
+  count  = var.enable_cicd_project_creation == true ? 1 : 0
   source = "./modules/cb-private-pool"
 
-  project_id = module.tf_source.cloudbuild_project_id
+  project_id = module.tf_source[0].cloudbuild_project_id
 
   private_worker_pool = {
     region                   = var.default_region,
@@ -153,11 +155,12 @@ module "tf_private_pool" {
 }
 
 module "tf_cloud_builder" {
+  count   = var.enable_cicd_project_creation == true ? 1 : 0
   source  = "terraform-google-modules/bootstrap/google//modules/tf_cloudbuild_builder"
   version = "~> 6.5"
 
-  project_id                   = module.tf_source.cloudbuild_project_id
-  dockerfile_repo_uri          = module.tf_source.csr_repos[local.cloudbuilder_repo].url
+  project_id                   = module.tf_source[0].cloudbuild_project_id
+  dockerfile_repo_uri          = module.tf_source[0].csr_repos[local.cloudbuilder_repo].url
   gar_repo_location            = var.default_region
   workflow_region              = var.default_region
   terraform_version            = local.terraform_version
@@ -165,20 +168,22 @@ module "tf_cloud_builder" {
   cb_logs_bucket_force_destroy = var.bucket_force_destroy
   trigger_location             = var.default_region
   enable_worker_pool           = true
-  worker_pool_id               = module.tf_private_pool.private_worker_pool_id
-  bucket_name                  = "${var.bucket_prefix}-${module.tf_source.cloudbuild_project_id}-tf-cloudbuilder-build-logs"
+  worker_pool_id               = module.tf_private_pool[0].private_worker_pool_id
+  bucket_name                  = "${var.bucket_prefix}-${module.tf_source[0].cloudbuild_project_id}-tf-cloudbuilder-build-logs"
 }
 
 module "bootstrap_csr_repo" {
+  count   = var.enable_cicd_project_creation == true ? 1 : 0
   source  = "terraform-google-modules/gcloud/google"
   version = "~> 3.1"
   upgrade = false
 
   create_cmd_entrypoint = "${path.module}/scripts/push-to-repo.sh"
-  create_cmd_body       = "${module.tf_source.cloudbuild_project_id} ${split("/", module.tf_source.csr_repos[local.cloudbuilder_repo].id)[3]} ${path.module}/Dockerfile"
+  create_cmd_body       = "${module.tf_source[0].cloudbuild_project_id} ${split("/", module.tf_source[0].csr_repos[local.cloudbuilder_repo].id)[3]} ${path.module}/Dockerfile"
 }
 
 resource "time_sleep" "cloud_builder" {
+  count           = var.enable_cicd_project_creation == true ? 1 : 0
   create_duration = "30s"
 
   depends_on = [
@@ -188,6 +193,7 @@ resource "time_sleep" "cloud_builder" {
 }
 
 module "build_terraform_image" {
+  count   = var.enable_cicd_project_creation == true ? 1 : 0
   source  = "terraform-google-modules/gcloud/google"
   version = "~> 3.1"
   upgrade = false
@@ -196,7 +202,7 @@ module "build_terraform_image" {
     "terraform_version" = local.terraform_version
   }
 
-  create_cmd_body = "beta builds triggers run  ${local.cloud_builder_trigger_id} --branch main --region ${var.default_region} --project ${module.tf_source.cloudbuild_project_id}"
+  create_cmd_body = "beta builds triggers run  ${local.cloud_builder_trigger_id} --branch main --region ${var.default_region} --project ${module.tf_source[0].cloudbuild_project_id}"
 
   module_depends_on = [
     time_sleep.cloud_builder,
@@ -206,19 +212,19 @@ module "build_terraform_image" {
 module "tf_workspace" {
   source   = "terraform-google-modules/bootstrap/google//modules/tf_cloudbuild_workspace"
   version  = "~> 6.4"
-  for_each = local.granular_sa
+  for_each = var.enable_cicd_project_creation == true ? local.granular_sa : {}
 
-  project_id                = module.tf_source.cloudbuild_project_id
+  project_id                = module.tf_source[0].cloudbuild_project_id
   location                  = var.default_region
   trigger_location          = var.default_region
   enable_worker_pool        = true
-  worker_pool_id            = module.tf_private_pool.private_worker_pool_id
+  worker_pool_id            = module.tf_private_pool[0].private_worker_pool_id
   state_bucket_self_link    = local.cb_config[each.key].state_bucket
-  log_bucket_name           = "${var.bucket_prefix}-${module.tf_source.cloudbuild_project_id}-${local.cb_config[each.key].source}-build-logs"
-  artifacts_bucket_name     = "${var.bucket_prefix}-${module.tf_source.cloudbuild_project_id}-${local.cb_config[each.key].source}-build-artifacts"
+  log_bucket_name           = "${var.bucket_prefix}-${module.tf_source[0].cloudbuild_project_id}-${local.cb_config[each.key].source}-build-logs"
+  artifacts_bucket_name     = "${var.bucket_prefix}-${module.tf_source[0].cloudbuild_project_id}-${local.cb_config[each.key].source}-build-artifacts"
   cloudbuild_plan_filename  = "cloudbuild-tf-plan.yaml"
   cloudbuild_apply_filename = "cloudbuild-tf-apply.yaml"
-  tf_repo_uri               = module.tf_source.csr_repos[local.cb_config[each.key].source].url
+  tf_repo_uri               = module.tf_source[0].csr_repos[local.cb_config[each.key].source].url
   cloudbuild_sa             = google_service_account.terraform-env-sa[each.key].id
   create_cloudbuild_sa      = false
   diff_sa_project           = true
@@ -229,7 +235,7 @@ module "tf_workspace" {
     "_ORG_ID"                       = var.org_id
     "_BILLING_ID"                   = var.billing_account
     "_GAR_REGION"                   = var.default_region
-    "_GAR_PROJECT_ID"               = module.tf_source.cloudbuild_project_id
+    "_GAR_PROJECT_ID"               = module.tf_source[0].cloudbuild_project_id
     "_GAR_REPOSITORY"               = local.gar_repository
     "_DOCKER_TAG_VERSION_TERRAFORM" = local.docker_tag_version_terraform
   }
@@ -244,9 +250,8 @@ module "tf_workspace" {
 }
 
 resource "google_artifact_registry_repository_iam_member" "terraform_sa_artifact_registry_reader" {
-  for_each = local.granular_sa
-
-  project    = module.tf_source.cloudbuild_project_id
+  for_each   = var.enable_cicd_project_creation == true ? local.granular_sa : {}
+  project    = module.tf_source[0].cloudbuild_project_id
   location   = var.default_region
   repository = local.gar_repository
   role       = "roles/artifactregistry.reader"
@@ -254,10 +259,10 @@ resource "google_artifact_registry_repository_iam_member" "terraform_sa_artifact
 }
 
 resource "google_sourcerepo_repository_iam_member" "member" {
-  for_each = local.granular_sa
+  for_each = var.enable_cicd_project_creation == true ? local.granular_sa : {}
 
-  project    = module.tf_source.cloudbuild_project_id
-  repository = module.tf_source.csr_repos["gcp-policies"].name
+  project    = module.tf_source[0].cloudbuild_project_id
+  repository = module.tf_source[0].csr_repos["gcp-policies"].name
   role       = "roles/viewer"
   member     = "serviceAccount:${google_service_account.terraform-env-sa[each.key].email}"
 }

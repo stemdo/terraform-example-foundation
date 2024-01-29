@@ -131,10 +131,11 @@ locals {
     ],
   }
 
-  bootstrap_projects = {
+  aux_bootstrap_projects = {
     "seed" = module.seed_bootstrap.seed_project_id,
-    "cicd" = local.cicd_project_id,
   }
+
+  bootstrap_projects = var.enable_cicd_project_creation == true ? merge(local.aux_bootstrap_projects, {"cicd" = local.cicd_project_id}) : local.aux_bootstrap_projects
 }
 
 resource "google_service_account" "terraform-env-sa" {
@@ -177,7 +178,7 @@ module "seed_project_iam_member" {
 
 module "cicd_project_iam_member" {
   source   = "./modules/parent-iam-member"
-  for_each = local.granular_sa_cicd_project
+  for_each = var.enable_cicd_project_creation == true ? local.granular_sa_cicd_project : {}
 
   member      = "serviceAccount:${google_service_account.terraform-env-sa[each.key].email}"
   parent_type = "project"
@@ -205,7 +206,7 @@ module "bootstrap_projects_remove_editor" {
 }
 
 resource "google_billing_account_iam_member" "tf_billing_user" {
-  for_each = local.granular_sa
+  for_each = var.grant_billing_user == true ? local.granular_sa : {}
 
   billing_account_id = var.billing_account
   role               = "roles/billing.user"
@@ -217,7 +218,7 @@ resource "google_billing_account_iam_member" "tf_billing_user" {
 }
 
 resource "google_billing_account_iam_member" "billing_admin_user" {
-  for_each = local.granular_sa
+  for_each = var.grant_billing_user == true ? local.granular_sa : {}
 
   billing_account_id = var.billing_account
   role               = "roles/billing.admin"

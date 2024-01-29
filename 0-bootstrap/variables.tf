@@ -58,6 +58,17 @@ variable "org_policy_admin_role" {
   default     = false
 }
 
+variable "org_policy_billing_user_role" {
+  description = "Set true to grant billing user role for admin group."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.org_policy_billing_user_role != null
+    error_message = "org_policy_billing_user_role must be set to true or false."
+  }
+}
+
 variable "project_prefix" {
   description = "Name prefix to use for projects created. Should be the same in all steps. Max size is 3 characters."
   type        = string
@@ -168,6 +179,28 @@ variable "initial_group_config" {
   description = "Define the group configuration when it is initialized. Valid values are: WITH_INITIAL_OWNER, EMPTY and INITIAL_GROUP_CONFIG_UNSPECIFIED."
   type        = string
   default     = "WITH_INITIAL_OWNER"
+}
+
+variable "grant_billing_user" {
+  description = "Set true to grant billing user/admin_user roles for each sa."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.grant_billing_user != null
+    error_message = "grant_billing_user must be set to true or false."
+  }
+}
+
+variable "enable_cicd_project_creation" {
+  description = "Set true to create the CICD project."
+  type        = bool
+  default     = true
+
+  validation {
+    condition     = var.enable_cicd_project_creation != null
+    error_message = "enable_cicd_project_creation must be set to true or false."
+  }
 }
 
 /* ----------------------------------------

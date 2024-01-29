@@ -90,17 +90,17 @@ output "optional_groups" {
 # GitHub Actions, GitLab CI/CD, Terraform Cloud, or Jenkins instead of Cloud Build
 output "cloudbuild_project_id" {
   description = "Project where Cloud Build configuration and terraform container image will reside."
-  value       = module.tf_source.cloudbuild_project_id
+  value       = var.enable_cicd_project_creation == true ? module.tf_source[0].cloudbuild_project_id : null
 }
 
 output "gcs_bucket_cloudbuild_artifacts" {
   description = "Bucket used to store Cloud Build artifacts in cicd project."
-  value       = { for key, value in module.tf_workspace : key => replace(value.artifacts_bucket, local.bucket_self_link_prefix, "") }
+  value       = { for key, value in (var.enable_cicd_project_creation == true ? module.tf_workspace : {}) : key => replace(value.artifacts_bucket, local.bucket_self_link_prefix, "") }
 }
 
 output "gcs_bucket_cloudbuild_logs" {
   description = "Bucket used to store Cloud Build logs in cicd project."
-  value       = { for key, value in module.tf_workspace : key => replace(value.logs_bucket, local.bucket_self_link_prefix, "") }
+  value       = { for key, value in (var.enable_cicd_project_creation == true ? module.tf_workspace : {}) : key => replace(value.logs_bucket, local.bucket_self_link_prefix, "") }
 }
 
 output "projects_gcs_bucket_tfstate" {
@@ -110,12 +110,12 @@ output "projects_gcs_bucket_tfstate" {
 
 output "cloud_builder_artifact_repo" {
   description = "Artifact Registry (AR) Repository created to store TF Cloud Builder images."
-  value       = "projects/${module.tf_source.cloudbuild_project_id}/locations/${var.default_region}/repositories/${module.tf_cloud_builder.artifact_repo}"
+  value       = var.enable_cicd_project_creation == true ? "projects/${module.tf_source[0].cloudbuild_project_id}/locations/${var.default_region}/repositories/${module.tf_cloud_builder[0].artifact_repo}" : null
 }
 
 output "csr_repos" {
   description = "List of Cloud Source Repos created by the module, linked to Cloud Build triggers."
-  value = { for k, v in module.tf_source.csr_repos : k => {
+  value = { for k, v in(var.enable_cicd_project_creation == true ? module.tf_source[0].csr_repos : {}) : k => {
     "id"      = v.id,
     "name"    = v.name,
     "project" = v.project,
@@ -126,22 +126,22 @@ output "csr_repos" {
 
 output "cloud_build_private_worker_pool_id" {
   description = "ID of the Cloud Build private worker pool."
-  value       = module.tf_private_pool.private_worker_pool_id
+  value       = var.enable_cicd_project_creation == true ? module.tf_private_pool[0].private_worker_pool_id : null
 }
 
 output "cloud_build_worker_range_id" {
   description = "The Cloud Build private worker IP range ID."
-  value       = module.tf_private_pool.worker_range_id
+  value       = var.enable_cicd_project_creation == true ? module.tf_private_pool[0].worker_range_id : null
 }
 
 output "cloud_build_worker_peered_ip_range" {
   description = "The IP range of the peered service network."
-  value       = module.tf_private_pool.worker_peered_ip_range
+  value       = var.enable_cicd_project_creation == true ? module.tf_private_pool[0].worker_peered_ip_range : null
 }
 
 output "cloud_build_peered_network_id" {
   description = "The ID of the Cloud Build peered network."
-  value       = module.tf_private_pool.peered_network_id
+  value       = var.enable_cicd_project_creation == true ? module.tf_private_pool[0].peered_network_id : null
 }
 
 /* ----------------------------------------

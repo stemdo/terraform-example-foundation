@@ -30,9 +30,12 @@ locals {
   ]
   org_project_creators = distinct(concat(var.org_project_creators, local.step_terraform_sa))
   parent               = var.parent_folder != "" ? "folders/${var.parent_folder}" : "organizations/${var.org_id}"
-  org_admins_org_iam_permissions = var.org_policy_admin_role == true ? [
-    "roles/orgpolicy.policyAdmin", "roles/resourcemanager.organizationAdmin", "roles/billing.user"
-  ] : ["roles/resourcemanager.organizationAdmin", "roles/billing.user"]
+  aux_org_admins_org_iam_permissions = var.org_policy_admin_role == true ? [
+    "roles/orgpolicy.policyAdmin", "roles/resourcemanager.organizationAdmin"
+  ] : ["roles/resourcemanager.organizationAdmin"]
+  org_admins_org_iam_permissions = var.org_policy_billing_user_role == true ? concat(
+    local.aux_org_admins_org_iam_permissions, ["roles/billing.user"]
+  ) : local.aux_org_admins_org_iam_permissions
   group_org_admins     = var.groups.create_groups ? module.required_group["group_org_admins"].id : var.group_org_admins
   group_billing_admins = var.groups.create_groups ? module.required_group["group_billing_admins"].id : var.group_billing_admins
 }
@@ -54,10 +57,11 @@ module "seed_bootstrap" {
   billing_account                = var.billing_account
   group_org_admins               = local.group_org_admins
   group_billing_admins           = local.group_billing_admins
+  grant_billing_user             = var.grant_billing_user
   default_region                 = var.default_region
   org_project_creators           = local.org_project_creators
   sa_enable_impersonation        = true
-  create_terraform_sa            = false
+  create_terraform_sa            = true
   parent_folder                  = var.parent_folder == "" ? "" : local.parent
   org_admins_org_iam_permissions = local.org_admins_org_iam_permissions
   project_prefix                 = var.project_prefix
